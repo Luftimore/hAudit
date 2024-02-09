@@ -1,0 +1,21 @@
+---
+manifest_version: "1"
+name: forum
+integrity:
+  network_seed: ~
+  properties: ~
+  origin_time: 1707479734959944
+  zomes:
+    - name: posts_integrity
+      hash: ~
+      bundled: "../../../target/wasm32-unknown-unknown/release/posts_integrity.wasm"
+      dependencies: ~
+      dylib: ~
+coordinator:
+  zomes:
+    - name: posts
+      hash: ~
+      bundled: "../../../target/wasm32-unknown-unknown/release/posts.wasm"
+      dependencies:
+        - name: posts_integrity
+      dylib: ~
