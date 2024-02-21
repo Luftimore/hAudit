@@ -4,7 +4,6 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
 import { AdminWebsocket, AppAgentWebsocket, CellType, CallZomeRequest, ActionHash } from '@holochain/client'
-
 import { Post } from './types'
 
 import * as childProcess from 'child_process'
@@ -70,7 +69,8 @@ app.whenReady().then(() => {
   // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.2.5-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
   // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.2.6-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
   // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-unknown-linux-gnu', ['-c', './out/configuration/conductor-config.yaml', '-p']);
-  conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
+  // conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
+  const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-pc-windows-msvc.exe', ['-c', './out/config/conductor-config.yaml', '-p']);
 
   conductorHandle.stdout.on('data', (data) => {
     console.log(`stdout: ${data}`);
@@ -101,7 +101,7 @@ app.whenReady().then(() => {
       // const installedApps = await adminWebsocket.listApps({});
       const appInterfaces = await adminWebsocket.listAppInterfaces();
       console.log('Got appInterfaces: ', appInterfaces);
-      let appPort;
+      
       if (appInterfaces.length > 0) {
         appPort = appInterfaces[0];
       } else {
@@ -120,6 +120,8 @@ app.whenReady().then(() => {
         membrane_proofs: {},
         path: '../happ/haudit_app/workdir/haudit_app.happ',
         network_seed: 'haudittestnetworkseed'
+      }).catch((error) => {
+        console.log("Error: " + error);
       });
 
       console.log("HELLO INSTALLING!");
