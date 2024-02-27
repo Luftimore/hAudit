@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -10,7 +10,10 @@ import * as childProcess from 'child_process'
 
 import split from 'split'
 
+const electronPDF = require('electron-pdf');
+
 let conductorHandle;
+const fs = require('fs');
 
 function createWindow(): void {
   // Create the browser window.
@@ -21,7 +24,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false
     }
   })
@@ -61,16 +64,67 @@ app.whenReady().then(() => {
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
+  ipcMain.on('saveNewAudit', (event, norms) => {
+    dialog.showSaveDialog({title: 'Audit speichern', defaultPath: 'neuesAudit.json', filters: [{ name: "JSON files", extensions: ['json']}]})
+    .then((result) => {
+      if (!result.canceled) {
+        const filePath = result.filePath;
+
+        try {
+          fs.writeFileSync(filePath, norms, 'utf-8');
+          console.log("Saved file.");
+          event.reply('newAuditSaved', {success: true});
+        } catch (err) {
+          console.log("Error saving file: " + err.message);
+          event.reply('newAuditSaved', {success: false, error: err.message});
+        }
+      }
+    });
+  });
+
+  ipcMain.on('loadAudit', (event) => {
+    dialog.showOpenDialog({ properties: ['openFile'] })
+    .then((result) => {
+      if (!result.canceled) {
+        const filePath = result.filePaths[0];
+
+        fs.readFile(filePath, 'utf-8', (err, data) => {
+          if (err) {
+            console.error('Error reading file: ', err);
+            return;
+          }
+
+          event.reply('file-opened', data);
+        });
+      }
+    }).catch((err) => {
+      console.error('Error opening file dialog: ', err);
+    });
+  });
+
+  ipcMain.on('openAsPDF', (event, data) => {
+    const htmlContent = `<pre>${data}</pre>`
+    
+    const pdfWin = new BrowserWindow({ width: 800, height: 600 });
+
+    pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+  });
+
+  ipcMain.handle('dialog', (event, method, params) => {
+    dialog[method](params);
+  });
+
   createWindow()
 
   // Source: https://github.com/holochain/launcher-electron/blob/holochain-0.3/src/main/holochainManager.ts
   // ------------------------------------------------
   // Set up conductor process
   // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.2.5-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
-  // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.2.6-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
+  const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.2.6-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
   // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-unknown-linux-gnu', ['-c', './out/configuration/conductor-config.yaml', '-p']);
   // conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-unknown-linux-gnu', ['-c', './out/config/conductor-config.yaml', '-p']);
-  const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-pc-windows-msvc.exe', ['-c', './out/config/conductor-config.yaml', '-p']);
+  // const conductorHandle = childProcess.spawn('./out/binaries/holochain-v0.3.0-beta-dev.35-x86_64-pc-windows-msvc.exe', ['-c', './out/config/conductor-config.yaml', '-p']);
 
   conductorHandle.stdout.on('data', (data) => {
     console.log(`stdout: ${data}`);
@@ -95,13 +149,13 @@ app.whenReady().then(() => {
     }
     if (line.includes('Conductor ready.')) {
       const adminWebsocket = await AdminWebsocket.connect(
-        new URL(`ws://127.0.0.1:1234`),
+        new URL("ws://127.0.0.1:1234")
       );
       console.log('Connected to admin websocket.');
       // const installedApps = await adminWebsocket.listApps({});
       const appInterfaces = await adminWebsocket.listAppInterfaces();
       console.log('Got appInterfaces: ', appInterfaces);
-      
+      let appPort;
       if (appInterfaces.length > 0) {
         appPort = appInterfaces[0];
       } else {
@@ -139,7 +193,7 @@ app.whenReady().then(() => {
       await adminWebsocket.authorizeSigningCredentials(cell_id);
       await adminWebsocket.attachAppInterface({ port: 1235 });
       const appAgentWs = await AppAgentWebsocket.connect(
-        new URL("ws://127.0.0.1:1235"),
+        new URL("ws://127.0.0.1:1234"),
         'haudit'
       );
 

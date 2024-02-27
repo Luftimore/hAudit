@@ -12,7 +12,8 @@ export default defineConfig({
   renderer: {
     resolve: {
       alias: {
-        '@renderer': resolve('src/renderer/src')
+        '@renderer': resolve('src/renderer/src'),
+        '~bootstrap': resolve(__dirname, 'node_modules/bootstrap')
       }
     },
     plugins: [vue()]

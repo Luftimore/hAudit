@@ -1,50 +1,81 @@
 <template>
     <div>
-        <h2>Norms and Norm Points</h2>
-        <div>
-            <button @click="addNorm">Add Norm</button>
-        </div>
-        <div v-for="(norm, index) in norms" :key="index">
-            <input type="text" :value="norm.name" @input="updateNormName($event, index)" placeholder="Enter Norm Name">
-            <button @click="addNormPoint(index)">Add Norm Point</button>
+        <h1>Neues Audit</h1>
+        <h2>Normen und Normpunkte</h2>
+        <div v-for="(norm, normIndex) in norms" :key="normIndex">
+            <input type="text" v-model="norm.name" placeholder="Norm eingeben">
+            <select v-model="norm.selectedValue">
+              <option v-for="option in selectionOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+            <button class="btn btn-primary button-item" @click="addNormPoint(normIndex)">Normpunkt hinzufügen</button>
             <ul>
                 <li v-for="(point, pointIndex) in norm.points" :key="pointIndex">
-                <input type="text" :value="point" @input="updateNormPoint($event, index, pointIndex)" placeholder="Enter Norm Point">
-                <button @click="removeNormPoint(index, pointIndex)">Remove</button>
+                <input type="text" v-model="point.name" placeholder="Normpunkt eingeben">
+                <select v-model="point.value">
+                  <option v-for="option in selectionOptions" :key="option" :value="option">{{ option }}</option>
+                </select>
+                <button class="btn btn-secondary button-item" @click="removeNormPoint(normIndex, pointIndex)">Entfernen</button>
                 </li>
             </ul>
-            <button @click="removeNorm(index)">Remove Norm</button>
+            <button class="btn btn-secondary button-item" @click="removeNorm(normIndex)">Norm entfernen</button>
         </div>
+        <div>
+            <button class="btn btn-primary button-item" @click="addNorm">Norm hinzufügen</button>
+        </div>
+        <button class="btn btn-secondary button-item" @click="navigateToMainMenu()">Zurück zum Hauptmenü</button>
+        <button class="btn btn-primary button-item" @click="saveNormsToFile()">Normen in Datei speichern</button>
     </div>
 </template>
   
   
 <script>
+  // import { ipcRenderer } from 'electron';
+
   export default {
     data() {
       return {
-        norms: []
+        norms: JSON.parse(localStorage.getItem('norms')) || [],
+        selectionOptions: ['+', '-', '~', '/']
       };
+    },
+    watch: {
+      norms: {
+        handler(newValue) {
+          localStorage.setItem('norms', JSON.stringify(newValue));
+        }
+      }
     },
     methods: {
       addNorm() {
-        this.norms.push({ name: '', points: [] });
+        this.norms.push({ name: '', selectedValue: '', points: [] });
       },
-      removeNorm(index) {
-        this.norms.splice(index, 1);
+      removeNorm(normIndex) {
+        this.norms.splice(normIndex, 1);
       },
       addNormPoint(normIndex) {
-        this.norms[normIndex].points.push('');
+        this.norms[normIndex].points.push({ name: '', selectedValue: ''});
       },
       removeNormPoint(normIndex, pointIndex) {
         this.norms[normIndex].points.splice(pointIndex, 1);
       },
-      updateNormName(event, index) {
-        this.norms[index].name = event.target.value;
+      navigateToMainMenu() {
+        this.$router.push("/");
       },
-        updateNormPoint(event, normIndex, pointIndex) {
-        this.norms[normIndex].points[pointIndex] = event.target.value;
+      saveNormsToFile() {
+        // const savePath = window.dialog.openDialog('showSaveDialog', {title: "Speicherort auswählen", buttonLabel: "Speichern", properties: ['createDirectory']})
+        // .then(result => {
+        //   console.log(result);
+        // });
+        
+        window.electron.ipcRenderer.send('saveNewAudit', JSON.stringify(this.norms, null, 2));
       }
     }
   };
 </script>
+
+<style>
+  .button-item {
+    width: 200px; /* Adjust the width as needed */
+    margin-bottom: 5px; /* Optional: Add margin between buttons */
+  }
+</style>

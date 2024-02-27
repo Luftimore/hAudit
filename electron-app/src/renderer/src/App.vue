@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import MainMenu from './views/MainMenu.vue'
 
 </script>
 
@@ -7,3 +6,7 @@ import MainMenu from './views/MainMenu.vue'
   <!-- <MainMenu></MainMenu> -->
   <router-view></router-view>
 </template>
+
+<style>
+  @import "~bootstrap/scss/bootstrap.scss";
+</style>
