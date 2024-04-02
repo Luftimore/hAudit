@@ -1,19 +1,24 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, IpcMainInvokeEvent, ipcRenderer } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
-import { AdminWebsocket, AppAgentWebsocket, CellType, CallZomeRequest, ActionHash } from '@holochain/client'
+import { AdminWebsocket, AppAgentWebsocket, CellType, CallZomeRequest, CallZomeRequestSigned, ActionHash, AppAgentCallZomeRequest, randomNonce, getNonceExpiration, encodeHashToBase64 } from '@holochain/client'
+import { ZomeCallNapi, ZomeCallSigner, ZomeCallUnsignedNapi } from '@holochain/hc-spin-rust-utils'
+import { encode, decode } from '@msgpack/msgpack'
 import { Post } from './types'
 
 import * as childProcess from 'child_process'
 
 import split from 'split'
 
-const electronPDF = require('electron-pdf');
+const jsPDF = require('jspdf');
+
+const rustUtils = require('@holochain/hc-spin-rust-utils')
 
 let conductorHandle;
 const fs = require('fs');
+var lair_url;
 
 function createWindow(): void {
   // Create the browser window.
@@ -111,6 +116,65 @@ app.whenReady().then(() => {
 
   });
 
+  ipcMain.on('exportAsPDF', (event, data) => {
+    dialog.showSaveDialog({title: 'Audit als PDF exportieren', defaultPath: 'neuesAudit.pdf', filters: [{ name: "PDF files", extensions: ['pdf']}]})
+    .then((result) => {
+      if (!result.canceled) {
+        const filePath = result.filePath;
+
+        const htmlContent = `<pre>${data}</pre>`
+    
+        const pdfWin = new BrowserWindow({ width: 800, height: 600 });
+
+        pdfWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`);
+
+        const doc_file = new jsPDF('p');
+
+        doc_file.text(data, 15, 15);
+
+        doc_file.save(filePath);
+      }
+    }).catch((err) => {
+      console.error("Error exporting PDF: " + err);
+    });
+  });
+
+  const WINDOW_INFO_MAP: Record<string, {agentPubKey; zomeCallSigner: ZomeCallSigner}> = {};
+
+  ipcMain.on('sign-zome-call', async (e: IpcMainInvokeEvent, request: CallZomeRequest) => {
+    const windowInfo = WINDOW_INFO_MAP[e.sender.id];
+
+    const zomeCallUnsignedNapi: ZomeCallUnsignedNapi = {
+      provenance: Array.from(request.provenance),
+      cellId: [Array.from(request.cell_id[0]), Array.from(request.cell_id[1])],
+      zomeName: request.zome_name,
+      fnName: request.fn_name,
+      payload: Array.from(encode(request.payload)),
+      nonce: Array.from(await randomNonce()),
+      expiresAt: getNonceExpiration()
+    };
+
+    const zomeCallSignedNapi: ZomeCallNapi =
+      await windowInfo.zomeCallSigner.signZomeCall(zomeCallUnsignedNapi);
+
+    const zomeCallSigned: CallZomeRequestSigned = {
+      provenance: Uint8Array.from(zomeCallSignedNapi.provenance),
+      cap_secret: null,
+      cell_id: [
+        Uint8Array.from(zomeCallSignedNapi.cellId[0]),
+        Uint8Array.from(zomeCallSignedNapi.cellId[1]),
+      ],
+      zome_name: zomeCallSignedNapi.zomeName,
+      fn_name: zomeCallSignedNapi.fnName,
+      payload: Uint8Array.from(zomeCallSignedNapi.payload),
+      signature: Uint8Array.from(zomeCallSignedNapi.signature),
+      expires_at: zomeCallSignedNapi.expiresAt,
+      nonce: Uint8Array.from(zomeCallSignedNapi.nonce)
+    }
+
+    return zomeCallSigned;
+  });
+
   ipcMain.handle('dialog', (event, method, params) => {
     dialog[method](params);
   });
@@ -147,6 +211,12 @@ app.whenReady().then(() => {
         `Holochain version 0.2.5 failed to start up and crashed. Check the logs for details.`
         );
     }
+
+    if (line.includes('connection_url')) {
+      lair_url = line.split('#')[2].trim()
+      console.log('LAIR URL: "' + lair_url + '"')
+    }
+
     if (line.includes('Conductor ready.')) {
       const adminWebsocket = await AdminWebsocket.connect(
         new URL("ws://127.0.0.1:1234")
@@ -189,11 +259,22 @@ app.whenReady().then(() => {
       //   process.exit();
       // }
 
-      const { cell_id } = appInfo.cell_info['forum'][0][CellType.Provisioned];
-      await adminWebsocket.authorizeSigningCredentials(cell_id);
+      var my_cell_id = null;
+
+      // console.log(await adminWebsocket.listCellIds());
+
+      if (!appInfo) {
+        my_cell_id = installedApps[0].cell_info['forum'][0][CellType.Provisioned];
+      } else {
+        my_cell_id = appInfo.cell_info['forum'][0][CellType.Provisioned];
+      }
+
+      console.log('CELL ID: ' , my_cell_id)
+      
+      // await adminWebsocket.authorizeSigningCredentials(cell_id);
       await adminWebsocket.attachAppInterface({ port: 1235 });
       const appAgentWs = await AppAgentWebsocket.connect(
-        new URL("ws://127.0.0.1:1234"),
+        new URL("ws://127.0.0.1:1235"),
         'haudit'
       );
 
@@ -202,17 +283,96 @@ app.whenReady().then(() => {
         content: "This is test content!"
       }
 
-      const zomeCallPayload: CallZomeRequest = {
-        cell_id,
-        zome_name: "posts",
-        fn_name: "create_post",
-        provenance: pubKey,
-        payload: post,
+      // const zomeCallPayload: CallZomeRequest = {
+      //   cell_id,
+      //   zome_name: "posts",
+      //   fn_name: "create_post",
+      //   provenance: pubKey,
+      //   payload: post,
+      // };
+
+      const zomeCallUnsignedNapi: ZomeCallUnsignedNapi = {
+        provenance: Array.from(pubKey),
+        cellId: [Array.from(my_cell_id.cell_id[0]), Array.from(my_cell_id.cell_id[1])],
+        zomeName: "posts",
+        fnName: "create_post",
+        payload: Array.from(encode(post)),
+        nonce: Array.from(await randomNonce()),
+        expiresAt: getNonceExpiration(),
       };
 
-      const response: ActionHash = await appAgentWs.callZome(zomeCallPayload, 30000);
+      const zomeCallSigner = await rustUtils.ZomeCallSigner.connect(lair_url, 'testing');
+      const zomeCallSignedNapi = await zomeCallSigner.signZomeCall(zomeCallUnsignedNapi);
 
-      console.log("Response: " + response);
+      const zomeCallSigned: CallZomeRequestSigned = {
+        provenance: Uint8Array.from(zomeCallSignedNapi.provenance),
+        cap_secret: null,
+        cell_id: [
+          Uint8Array.from(zomeCallSignedNapi.cellId[0]),
+          Uint8Array.from(zomeCallSignedNapi.cellId[1]),
+        ],
+        zome_name: zomeCallSignedNapi.zomeName,
+        fn_name: zomeCallSignedNapi.fnName,
+        payload: Uint8Array.from(zomeCallSignedNapi.payload),
+        signature: Uint8Array.from(zomeCallSignedNapi.signature),
+        expires_at: zomeCallSignedNapi.expiresAt,
+        nonce: Uint8Array.from(zomeCallSignedNapi.nonce)
+      }
+
+      const response: ActionHash = await appAgentWs.callZome(zomeCallSigned, 30000)
+      .catch((err) => {
+        console.log("Error: " + err);
+      });
+
+      console.log("Response Action hash: " + JSON.stringify(response));
+
+      const data = JSON.parse(JSON.stringify(response));
+
+      const actionHashBuffer = data.signed_action.hashed.hash.data;
+
+      console.log("Action hash: " + actionHashBuffer);
+
+      const getAllPostsUnsignedNapi: ZomeCallUnsignedNapi = {
+        provenance: Array.from(pubKey),
+        cellId: [Array.from(my_cell_id.cell_id[0]), Array.from(my_cell_id.cell_id[1])],
+        zomeName: "posts",
+        fnName: "get_all_posts_content",
+        payload: Array.from(encode(null)),
+        // payload: Array.from(encode(actionHashBuffer)),
+        nonce: Array.from(await randomNonce()),
+        expiresAt: getNonceExpiration()
+      }
+
+      const getAllPostsSignedNapi = await zomeCallSigner.signZomeCall(getAllPostsUnsignedNapi);
+
+      const getAllPostsSigned: CallZomeRequestSigned = {
+        provenance: Uint8Array.from(getAllPostsSignedNapi.provenance),
+        cap_secret: null,
+        cell_id: [
+          Uint8Array.from(getAllPostsSignedNapi.cellId[0]),
+          Uint8Array.from(getAllPostsSignedNapi.cellId[1]),
+        ],
+        zome_name: getAllPostsSignedNapi.zomeName,
+        fn_name: getAllPostsSignedNapi.fnName,
+        payload: Uint8Array.from(getAllPostsSignedNapi.payload),
+        signature: Uint8Array.from(getAllPostsSignedNapi.signature),
+        expires_at: getAllPostsSignedNapi.expiresAt,
+        nonce: Uint8Array.from(getAllPostsSignedNapi.nonce)
+      }
+
+      const allPostsResponse = await appAgentWs.callZome(getAllPostsSigned, 30000)
+      .catch((err) => {
+        console.log("Error: " + err);
+      })
+      .then((response2) => {
+        const data = JSON.parse(JSON.stringify(response2));
+        console.log("Response latest posts: " + JSON.stringify(response2));
+        // console.log(encodeHashToBase64(response));
+
+        console.log(decode(data[0].entry.Present.entry.data));
+      });
+
+      console.log("AllPostsResponse: " + JSON.stringify(allPostsResponse));
 
       await appAgentWs.appWebsocket.client.close();
       await adminWebsocket.client.close();

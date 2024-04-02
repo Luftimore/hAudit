@@ -2,7 +2,8 @@
     <div>
         <h1>Neues Audit</h1>
         <h2>Normen und Normpunkte</h2>
-        <div v-for="(norm, normIndex) in norms" :key="normIndex">
+        <CreateAuditReport></CreateAuditReport>
+        <!-- <div v-for="(norm, normIndex) in norms" :key="normIndex">
             <input type="text" v-model="norm.name" placeholder="Norm eingeben">
             <select v-model="norm.selectedValue">
               <option v-for="option in selectionOptions" :key="option" :value="option">{{ option }}</option>
@@ -21,15 +22,17 @@
         </div>
         <div>
             <button class="btn btn-primary button-item" @click="addNorm">Norm hinzufügen</button>
-        </div>
+        </div> -->
         <button class="btn btn-secondary button-item" @click="navigateToMainMenu()">Zurück zum Hauptmenü</button>
-        <button class="btn btn-primary button-item" @click="saveNormsToFile()">Normen in Datei speichern</button>
+        <!-- <button class="btn btn-primary button-item" @click="saveNormsToFile()">Normen in Datei speichern</button>
+        <button class="btn btn-secondary button-item" @click="exportNormsAsPDF()">Normen als PDF exportieren</button> -->
     </div>
 </template>
   
   
 <script>
   // import { ipcRenderer } from 'electron';
+  import CreateAuditReport from '../components/CreateAuditReport.vue'
 
   export default {
     data() {
@@ -68,6 +71,9 @@
         // });
         
         window.electron.ipcRenderer.send('saveNewAudit', JSON.stringify(this.norms, null, 2));
+      },
+      exportNormsAsPDF() {
+        window.electron.ipcRenderer.send('exportAsPDF', JSON.stringify(this.norms));
       }
     }
   };
