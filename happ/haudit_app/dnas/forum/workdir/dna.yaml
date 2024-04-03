@@ -4,7 +4,7 @@ name: forum
 integrity:
   network_seed: ~
   properties: ~
-  origin_time: 1707479734959944
+  origin_time: 1708859275049532
   zomes:
     - name: posts_integrity
       hash: ~

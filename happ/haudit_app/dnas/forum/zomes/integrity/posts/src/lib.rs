@@ -5,7 +5,7 @@ pub use post::*;
 use hdi::prelude::*;
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type")]
-#[hdk_entry_types]
+#[hdk_entry_defs]
 #[unit_enum(UnitEntryTypes)]
 pub enum EntryTypes {
     Post(Post),

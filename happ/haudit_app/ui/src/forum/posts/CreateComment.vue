@@ -25,8 +25,8 @@ import '@material/mwc-button';
 import '@material/mwc-icon-button';
 import '@material/mwc-snackbar';
 import { Snackbar } from '@material/mwc-snackbar';
-import '@material/mwc-textarea';
 
+import '@material/mwc-textarea';
 export default defineComponent({
   data(): {
     commentContent: string;

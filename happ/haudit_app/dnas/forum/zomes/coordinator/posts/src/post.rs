@@ -15,13 +15,7 @@ pub fn create_post(post: Post) -> ExternResult<Record> {
 }
 #[hdk_extern]
 pub fn get_latest_post(original_post_hash: ActionHash) -> ExternResult<Option<Record>> {
-    let links = get_links(
-        GetLinksInputBuilder::try_new(
-                original_post_hash.clone(),
-                LinkTypes::PostUpdates,
-            )?
-            .build(),
-    )?;
+    let links = get_links(original_post_hash.clone(), LinkTypes::PostUpdates, None)?;
     let latest_link = links
         .into_iter()
         .max_by(|link_a, link_b| link_a.timestamp.cmp(&link_b.timestamp));
@@ -65,13 +59,7 @@ pub fn get_all_revisions_for_post(
     let Some(original_record) = get_original_post(original_post_hash.clone())? else {
         return Ok(vec![]);
     };
-    let links = get_links(
-        GetLinksInputBuilder::try_new(
-                original_post_hash.clone(),
-                LinkTypes::PostUpdates,
-            )?
-            .build(),
-    )?;
+    let links = get_links(original_post_hash.clone(), LinkTypes::PostUpdates, None)?;
     let get_input: Vec<GetInput> = links
         .into_iter()
         .map(|link| Ok(

@@ -60,13 +60,7 @@ pub fn delete_comment(original_comment_hash: ActionHash) -> ExternResult<ActionH
             ),
         )?;
     let comment = Comment::try_from(entry)?;
-    let links = get_links(
-        GetLinksInputBuilder::try_new(
-                comment.post_hash.clone(),
-                LinkTypes::PostToComments,
-            )?
-            .build(),
-    )?;
+    let links = get_links(comment.post_hash.clone(), LinkTypes::PostToComments, None)?;
     for link in links {
         if let Some(action_hash) = link.target.into_action_hash() {
             if action_hash.eq(&original_comment_hash) {
@@ -105,9 +99,7 @@ pub fn get_oldest_delete_for_comment(
 }
 #[hdk_extern]
 pub fn get_comments_for_post(post_hash: ActionHash) -> ExternResult<Vec<Link>> {
-    get_links(
-        GetLinksInputBuilder::try_new(post_hash, LinkTypes::PostToComments)?.build(),
-    )
+    get_links(post_hash, LinkTypes::PostToComments, None)
 }
 #[hdk_extern]
 pub fn get_deleted_comments_for_post(
